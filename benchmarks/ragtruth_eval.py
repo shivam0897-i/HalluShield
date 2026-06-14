@@ -35,7 +35,7 @@ _TASK_DOMAIN = {"QA": "general", "Summary": "general", "Data2txt": "general"}
 
 class Example:
     def __init__(self, id, answer, chunks, hallucinated, domain="general", task_type=None,
-                 gold_spans=None):
+                 gold_spans=None, query=""):
         self.id = id
         self.answer = answer
         self.chunks = chunks
@@ -44,6 +44,8 @@ class Example:
         self.task_type = task_type
         # Gold hallucinated char spans [(start, end), ...] for span-level scoring.
         self.gold_spans = gold_spans or []
+        # The question that produced the answer (threaded into grounding/judge).
+        self.query = query
 
 
 class Metrics:
@@ -79,7 +81,7 @@ def predict_hallucinated(example: Example, fusion, flag_warn: bool = True) -> bo
     unreviewed" stance); `flag_warn=False` flags only HEAL (precision-leaning).
     Report which setting a number was produced under.
     """
-    result = validate(example.answer, example.chunks, example.domain, fusion=fusion)
+    result = validate(example.answer, example.chunks, example.domain, fusion=fusion, query=example.query)
     if flag_warn:
         return result.verdict is not Verdict.PASS
     return result.verdict is Verdict.HEAL
@@ -89,7 +91,8 @@ def predict_hallucinated(example: Example, fusion, flag_warn: bool = True) -> bo
 # Loaders
 # --------------------------------------------------------------------------- #
 def load_jsonl(path: str) -> list[Example]:
-    """Self-contained JSONL: {id?, response, hallucinated, chunks:[{id,text,source?}], domain?}."""
+    """Self-contained JSONL: {id?, response, hallucinated, chunks:[{id,text,source?}],
+    domain?, gold_spans?:[[start,end],...]}."""
     examples: list[Example] = []
     with open(path, encoding="utf-8") as fh:
         for line in fh:
@@ -108,6 +111,8 @@ def load_jsonl(path: str) -> list[Example]:
                     chunks=chunks,
                     hallucinated=bool(row["hallucinated"]),
                     domain=row.get("domain", "general"),
+                    gold_spans=[tuple(s) for s in row.get("gold_spans", [])],
+                    query=row.get("question", ""),
                 )
             )
     return examples
@@ -163,17 +168,20 @@ def load_ragtruth(
                 continue
             src = sources.get(row["source_id"], {})
             task_type = src.get("task_type", "QA")
+            source_info = src.get("source_info", "")
+            question = source_info.get("question", "") if isinstance(source_info, dict) else ""
             labels = row.get("labels", [])
             gold_spans = [(lab["start"], lab["end"]) for lab in labels if "start" in lab and "end" in lab]
             examples.append(
                 Example(
                     id=str(row.get("id")),
                     answer=row["response"],
-                    chunks=_chunks_from_source(row["source_id"], task_type, src.get("source_info", "")),
+                    chunks=_chunks_from_source(row["source_id"], task_type, source_info),
                     hallucinated=len(labels) > 0,
                     domain=_TASK_DOMAIN.get(task_type, "general"),
                     task_type=task_type,
                     gold_spans=gold_spans,
+                    query=question,
                 )
             )
     if skipped_quality or skipped_split:

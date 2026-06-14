@@ -63,7 +63,7 @@ class HalluShield:
             chunks = report.kept
 
         raw = self.generator.generate(query, chunks)
-        result = validate(raw, chunks, domain, fusion=self.fusion)
+        result = validate(raw, chunks, domain, fusion=self.fusion, query=query)
 
         healed = False
         heal: HealResult | None = None

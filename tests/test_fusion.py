@@ -13,7 +13,7 @@ class _Stub:
         self._contradiction = contradiction
         self._best = best_chunk_id
 
-    def score(self, claim, chunks):
+    def score(self, claim, chunks, query=""):
         return SignalResult(self.name, self._score, best_chunk_id=self._best,
                             contradiction=self._contradiction)
 

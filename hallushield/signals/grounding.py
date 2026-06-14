@@ -30,15 +30,13 @@ class GroundingSignal:
             method=method, model_path=model_path or MODELS["grounding"]
         )
 
-    def score(self, claim: str, chunks: list[Chunk]) -> SignalResult:
+    def score(self, claim: str, chunks: list[Chunk], query: str = "") -> SignalResult:
         context = [c.text for c in chunks]
         # LettuceDetect returns spans of `claim` that are unsupported by context.
-        # `question` is required by the API; the Signal protocol doesn't carry the
-        # query, so we pass "" (LettuceDetect still scores answer-vs-context).
-        # TODO(query-threading): thread the original query into Signal.score for
-        # a fairer QA-task score.
+        # Threading the real query materially improves detection (the model was
+        # trained on QA/summarization with a question); empty query under-detects.
         spans = self._detector.predict(
-            context=context, question="", answer=claim, output_format="spans"
+            context=context, question=query, answer=claim, output_format="spans"
         )
         flagged = sum(max(0, s["end"] - s["start"]) for s in spans)
         # Spans can overlap, so flagged length may exceed len(claim); clamp the

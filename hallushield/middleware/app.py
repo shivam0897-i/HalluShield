@@ -40,7 +40,7 @@ def validate_endpoint(req: ValidateRequest) -> ValidateResponse:
     started = time.perf_counter()
     chunks = [Chunk(id=c.id, text=c.text, source=c.source) for c in req.chunks]
     try:
-        result = validate(req.answer, chunks, req.domain, fusion=_get_fusion())
+        result = validate(req.answer, chunks, req.domain, fusion=_get_fusion(), query=req.query)
     except Exception as exc:  # noqa: BLE001 — fail CLOSED; never return PASS on error
         raise HTTPException(
             status_code=500, detail={"error": "firewall_error", "message": str(exc)}

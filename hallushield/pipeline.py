@@ -32,12 +32,13 @@ def validate(
     chunks: list[Chunk],
     domain: str = "general",
     fusion: FusionScorer | None = None,
+    query: str = "",
 ) -> ValidationResult:
     fusion = fusion or build_default_fusion()
 
     claims: list[ClaimScore] = []
     for i, sentence in enumerate(split_sentences(answer)):
-        fused, results, best_chunk = fusion.score_claim(sentence, chunks)
+        fused, results, best_chunk = fusion.score_claim(sentence, chunks, query)
         claims.append(
             ClaimScore(
                 sentence_id=i,

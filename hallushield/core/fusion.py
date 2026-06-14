@@ -23,10 +23,12 @@ class FusionScorer:
         self.contradiction_penalty = contradiction_penalty
 
     def score_claim(
-        self, claim: str, chunks: list[Chunk]
+        self, claim: str, chunks: list[Chunk], query: str = ""
     ) -> tuple[float, dict[str, SignalResult], str | None]:
         """Return (fused_score, per-signal results, best supporting chunk id)."""
-        results: dict[str, SignalResult] = {s.name: s.score(claim, chunks) for s in self.signals}
+        results: dict[str, SignalResult] = {
+            s.name: s.score(claim, chunks, query) for s in self.signals
+        }
         if not results:
             return 0.0, results, None
 

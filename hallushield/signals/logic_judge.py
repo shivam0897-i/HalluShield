@@ -24,6 +24,8 @@ from ..core.types import Chunk, SignalResult
 
 _PROMPT = """You are a strict fact-checker. Decide how well the CLAIM is supported by the CONTEXT.
 
+QUESTION: {query}
+
 CONTEXT:
 {context}
 
@@ -66,11 +68,11 @@ class LogicJudgeSignal:
     def __init__(self, judge: Callable[[str], str] | None = None, model: str | None = None) -> None:
         self._judge = judge or _build_litellm_judge(model or MODELS["judge"])
 
-    def score(self, claim: str, chunks: list[Chunk]) -> SignalResult:
+    def score(self, claim: str, chunks: list[Chunk], query: str = "") -> SignalResult:
         if not claim.strip():
             return SignalResult(self.name, 0.0)
         context = "\n\n".join(f"[{c.id}] {c.text}" for c in chunks) or "(no context)"
-        reply = self._judge(_PROMPT.format(context=context, claim=claim))
+        reply = self._judge(_PROMPT.format(query=query or "(not provided)", context=context, claim=claim))
         score = _parse_score(reply)
 
         ct = content_tokens(claim)

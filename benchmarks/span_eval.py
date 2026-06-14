@@ -80,7 +80,7 @@ def evaluate_spans(examples: list[Example], fusion=None, flag_warn: bool = True)
     fusion = fusion or build_default_fusion()
     tp = fp = fn = 0
     for ex in examples:
-        result = validate(ex.answer, ex.chunks, ex.domain, fusion=fusion)
+        result = validate(ex.answer, ex.chunks, ex.domain, fusion=fusion, query=ex.query)
         pred = predicted_spans(ex.answer, result, flag_warn=flag_warn)
         m = char_span_prf1(pred, ex.gold_spans, len(ex.answer))
         tp += m.tp

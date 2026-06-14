@@ -18,7 +18,7 @@ class LexicalOverlapSignal:
     def __init__(self, name: str = "lexical") -> None:
         self.name = name
 
-    def score(self, claim: str, chunks: list[Chunk]) -> SignalResult:
+    def score(self, claim: str, chunks: list[Chunk], query: str = "") -> SignalResult:
         claim_tokens = content_tokens(claim)
         if not claim_tokens or not chunks:
             return SignalResult(self.name, 0.0)

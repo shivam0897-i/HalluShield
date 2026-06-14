@@ -60,7 +60,7 @@ class SelfHealer:
             sub_query = rephrase_for_claim(query, failed_claim)
             chunks = self.retriever.search(sub_query, k=self.k)
             segment = self.generator.generate(sub_query, chunks)
-            result = validate(segment, chunks, domain, fusion=self.fusion)
+            result = validate(segment, chunks, domain, fusion=self.fusion, query=query)
             if result.verdict is Verdict.PASS:
                 return HealResult(True, segment, attempt, result.answer_score, chunks)
         # Exhausted attempts — fail honest, not silent.

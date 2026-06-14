@@ -40,11 +40,15 @@ class SignalResult:
 
 @runtime_checkable
 class Signal(Protocol):
-    """Anything that scores a claim against retrieved chunks."""
+    """Anything that scores a claim against retrieved chunks.
+
+    `query` (the original user question) is optional context — some signals
+    (grounding, logic-judge) score better with it; others (lexical) ignore it.
+    """
 
     name: str
 
-    def score(self, claim: str, chunks: list[Chunk]) -> SignalResult: ...
+    def score(self, claim: str, chunks: list[Chunk], query: str = "") -> SignalResult: ...
 
 
 class Verdict(str, Enum):
