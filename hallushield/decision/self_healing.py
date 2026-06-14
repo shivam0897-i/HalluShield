@@ -29,6 +29,9 @@ def rephrase_for_claim(query: str, failed_claim: str) -> str:
     Framing matters: asking the model to *verify* the false claim makes an honest,
     context-grounded model refuse ("I don't have enough information"). Asking it to
     *re-answer the question correctly from context* lets it recover the right answer.
+
+    `failed_claim` comes from the firewall's own sentence splitter (not untrusted
+    user input); treat it as adversarial if that ever changes.
     """
     return (
         f"{query.strip()} Answer accurately using only the provided context. "

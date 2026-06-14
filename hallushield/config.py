@@ -52,6 +52,8 @@ CONTRADICTION_PENALTY: float = 0.25
 # Note: at 0.4, any flagged span yields score <= 0.6, so in the medical domain
 # (warn=0.70) a flagged claim goes straight to HEAL, not WARN — an intentional
 # "block any medical hallucination" stance. Lower it to allow a WARN band.
+# This penalty is applied inside the grounding signal (pre-fusion), so it
+# compounds with the fusion-level CONTRADICTION_PENALTY below.
 GROUNDING_SPAN_PENALTY: float = 0.4
 
 # How the per-sentence scores roll up to an answer-level score.
