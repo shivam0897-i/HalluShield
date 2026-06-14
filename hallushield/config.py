@@ -44,6 +44,13 @@ DEFAULT_WEIGHTS: dict[str, float] = {
 # contradiction (see HALLUSHIELD.md §7.6 — additive, then clipped to [0,1]).
 CONTRADICTION_PENALTY: float = 0.25
 
+# Extra penalty applied by GroundingSignal whenever ANY unsupported span is
+# detected, regardless of span length. This ensures a short but critical
+# hallucination (e.g. a wrong dosage in an otherwise long sentence) cannot
+# slip through the strict medical threshold purely because its character
+# coverage is low. The final score is max(0, 1 - coverage - penalty).
+GROUNDING_SPAN_PENALTY: float = 0.4
+
 # How the per-sentence scores roll up to an answer-level score.
 # "mean" reports average groundedness; the answer *verdict* is always the
 # worst per-claim verdict (firewall semantics: one bad claim blocks).
