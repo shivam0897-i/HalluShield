@@ -57,10 +57,13 @@ class GroundingSignal:
         # LettuceDetect returns spans of `claim` that are unsupported by context.
         # Threading the real query materially improves detection (the model was
         # trained on QA/summarization with a question); empty query under-detects.
-        spans = self._detector.predict(
+        raw_spans = self._detector.predict(
             context=context, question=query, answer=claim, output_format="spans"
         )
-        flagged = sum(max(0, s["end"] - s["start"]) for s in spans)
+        # Ignore degenerate (zero-length) spans so a buggy detector cannot trigger
+        # the flat penalty with no actually-flagged characters.
+        spans = [s for s in raw_spans if s["end"] > s["start"]]
+        flagged = sum(s["end"] - s["start"] for s in spans)
         # Spans can overlap; clamp unsupported fraction to [0, 1].
         coverage = min(1.0, flagged / len(claim))
         # Apply a flat penalty whenever any span is flagged, so a short but

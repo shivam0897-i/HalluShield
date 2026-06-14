@@ -49,6 +49,9 @@ CONTRADICTION_PENALTY: float = 0.25
 # hallucination (e.g. a wrong dosage in an otherwise long sentence) cannot
 # slip through the strict medical threshold purely because its character
 # coverage is low. The final score is max(0, 1 - coverage - penalty).
+# Note: at 0.4, any flagged span yields score <= 0.6, so in the medical domain
+# (warn=0.70) a flagged claim goes straight to HEAL, not WARN — an intentional
+# "block any medical hallucination" stance. Lower it to allow a WARN band.
 GROUNDING_SPAN_PENALTY: float = 0.4
 
 # How the per-sentence scores roll up to an answer-level score.

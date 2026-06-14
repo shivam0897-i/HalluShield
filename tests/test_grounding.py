@@ -58,7 +58,7 @@ def test_no_spans_passes_medical():
 
 # ---------------------------------------------------------------------------
 # Short span in a long claim — regression test.
-# A 4-char unsupported span ("0mg") in a ~50-char claim gives coverage ≈ 0.08.
+# A 4-char unsupported span ("10mg") in a ~50-char claim gives coverage ≈ 0.08.
 # Old formula: score = 1 - 0.08 = 0.92 → PASS (wrong — hallucination missed).
 # New formula: score = 1 - 0.08 - 0.4 = 0.52 → not PASS (correct).
 # ---------------------------------------------------------------------------
@@ -83,7 +83,7 @@ def test_short_span_fails_medical_with_new_formula():
 def test_old_formula_would_have_passed_short_span():
     """Document that the old 1-coverage formula was insufficient."""
     spans = _span_for_wrong_dosage()
-    flagged = sum(s["end"] - s["start"] for s in spans)
+    flagged = sum(max(0, s["end"] - s["start"]) for s in spans)
     old_score = 1.0 - min(1.0, flagged / len(LONG_CLAIM))
     # Old score passes the 0.90 medical bar — this is the bug we fixed.
     assert old_score >= 0.90, (
@@ -175,3 +175,16 @@ def test_best_chunk_id_none_when_no_chunks():
 
 def test_penalty_constant_sensible():
     assert 0.0 < GROUNDING_SPAN_PENALTY < 1.0
+
+
+# ---------------------------------------------------------------------------
+# Degenerate (zero-length) spans are ignored — no false penalty
+# ---------------------------------------------------------------------------
+
+
+def test_zero_length_span_is_ignored():
+    # A span with start == end flags no characters and must not trigger the penalty.
+    detector = FakeDetector(spans=[{"start": 5, "end": 5, "text": ""}])
+    sig = GroundingSignal(detector=detector)
+    r = sig.score("Metformin 500mg twice daily", CHUNKS)
+    assert r.score == 1.0
