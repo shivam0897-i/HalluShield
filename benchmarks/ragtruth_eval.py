@@ -34,13 +34,16 @@ _TASK_DOMAIN = {"QA": "general", "Summary": "general", "Data2txt": "general"}
 
 
 class Example:
-    def __init__(self, id, answer, chunks, hallucinated, domain="general", task_type=None):
+    def __init__(self, id, answer, chunks, hallucinated, domain="general", task_type=None,
+                 gold_spans=None):
         self.id = id
         self.answer = answer
         self.chunks = chunks
         self.hallucinated = hallucinated
         self.domain = domain
         self.task_type = task_type
+        # Gold hallucinated char spans [(start, end), ...] for span-level scoring.
+        self.gold_spans = gold_spans or []
 
 
 class Metrics:
@@ -160,14 +163,17 @@ def load_ragtruth(
                 continue
             src = sources.get(row["source_id"], {})
             task_type = src.get("task_type", "QA")
+            labels = row.get("labels", [])
+            gold_spans = [(lab["start"], lab["end"]) for lab in labels if "start" in lab and "end" in lab]
             examples.append(
                 Example(
                     id=str(row.get("id")),
                     answer=row["response"],
                     chunks=_chunks_from_source(row["source_id"], task_type, src.get("source_info", "")),
-                    hallucinated=len(row.get("labels", [])) > 0,
+                    hallucinated=len(labels) > 0,
                     domain=_TASK_DOMAIN.get(task_type, "general"),
                     task_type=task_type,
+                    gold_spans=gold_spans,
                 )
             )
     if skipped_quality or skipped_split:

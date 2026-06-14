@@ -55,3 +55,23 @@ def split_sentences(text: str) -> list[str]:
         else:
             merged.append(piece)
     return [s.strip() for s in merged if s.strip()]
+
+
+def split_sentences_with_offsets(text: str) -> list[tuple[str, int, int]]:
+    """Like `split_sentences`, but also returns each sentence's [start, end) char
+    offsets in the original `text` (needed for span-level scoring).
+
+    Offsets are located by forward search from a moving cursor, so they are exact
+    for the common (un-merged) case; an abbreviation-merged sentence that can't be
+    found verbatim falls back to the cursor position (approximate).
+    """
+    text = text or ""
+    spans: list[tuple[str, int, int]] = []
+    cursor = 0
+    for sentence in split_sentences(text):
+        idx = text.find(sentence, cursor)
+        if idx < 0:
+            idx = cursor
+        spans.append((sentence, idx, idx + len(sentence)))
+        cursor = idx + len(sentence)
+    return spans
