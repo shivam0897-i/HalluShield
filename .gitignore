@@ -19,6 +19,7 @@ htmlcov/
 results*.json
 *.faiss
 datasets/raw/
+datasets/*.jsonl
 models/
 .env
 .env.*
