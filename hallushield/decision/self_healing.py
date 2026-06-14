@@ -24,8 +24,17 @@ FALLBACK_MESSAGE = "I don't have enough information to answer this accurately."
 
 
 def rephrase_for_claim(query: str, failed_claim: str) -> str:
-    """Build a targeted sub-query aimed at the specific failed claim."""
-    return f"{query.strip()} Focus specifically on verifying: {failed_claim.strip()}"
+    """Re-ask the original question, flagging the prior unsupported claim to correct.
+
+    Framing matters: asking the model to *verify* the false claim makes an honest,
+    context-grounded model refuse ("I don't have enough information"). Asking it to
+    *re-answer the question correctly from context* lets it recover the right answer.
+    """
+    return (
+        f"{query.strip()} Answer accurately using only the provided context. "
+        f"A previous attempt made an unsupported claim that must be corrected: "
+        f"{failed_claim.strip()}"
+    )
 
 
 @dataclass
