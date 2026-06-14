@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+
+# Test / tooling
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Project
+results*.json
+*.faiss
+datasets/raw/
+models/
+.env
+.env.*
+
+# Local agent / IDE state (not production)
+.claude/
+.idea/
+.vscode/
+
+# Binary docs (superseded by HALLUSHIELD.md / README.md)
+*.docx
+
+# Internal design / agent docs (kept local, not for public repo)
+HALLUSHIELD.md
+CLAUDE.md
+
+# Local-only helper scripts (manual smoke tests, not part of the package)
+scripts/
