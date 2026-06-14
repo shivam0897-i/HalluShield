@@ -6,6 +6,17 @@ scorers the default pipeline runs, so an ablation row is one config change.
 
 from __future__ import annotations
 
+import os
+
+# Auto-load a local .env (gitignored) when python-dotenv is available, so API
+# keys and model overrides are picked up without manual exports. No-op otherwise.
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv()
+except ImportError:
+    pass
+
 # Domain-adaptive decision thresholds (see HALLUSHIELD.md §7.7).
 # Stricter for high-stakes domains; relaxed for general queries.
 THRESHOLDS: dict[str, dict[str, float]] = {
@@ -43,6 +54,6 @@ MODELS: dict[str, str] = {
     "grounding": "KRLabsOrg/lettucedect-base-modernbert-en-v1",
     "nli": "cross-encoder/nli-deberta-v3-base",
     "embeddings": "BAAI/bge-small-en-v1.5",
-    "judge": "claude-opus-4-8",        # LLM-as-judge (Phase 2)
-    "generator": "claude-opus-4-8",    # answer generation (Phase 1)
+    "judge": os.environ.get("HALLUSHIELD_JUDGE_MODEL", "claude-opus-4-8"),        # LLM-as-judge (Phase 2)
+    "generator": os.environ.get("HALLUSHIELD_GENERATOR_MODEL", "claude-opus-4-8"),  # answer generation (Phase 1)
 }
