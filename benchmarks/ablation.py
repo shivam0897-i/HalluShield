@@ -20,7 +20,7 @@ from hallushield import config
 from hallushield.core.fusion import FusionScorer
 from hallushield.signals import build_signal
 
-from .ragtruth_eval import Example, evaluate, load_examples
+from .ragtruth_eval import Example, evaluate, load_examples, sample_examples
 
 # Ordered ablation (plan §Evaluation): trivial baseline, then the core grounding
 # model, then each added signal. Rows for signals not yet installed/built are
@@ -87,12 +87,14 @@ def main() -> None:
     parser.add_argument("--jsonl", help="self-contained JSONL dump (custom/injected)")
     parser.add_argument("--split", help="RAGTruth split filter, e.g. train|test")
     parser.add_argument("--demo", action="store_true", help="use the built-in synthetic fixture")
+    parser.add_argument("--limit", type=int, default=0, help="evaluate a random sample of this many")
     parser.add_argument("--out", default="results.json", help="where to write the results JSON")
     args = parser.parse_args()
 
     examples, source = load_examples(
         responses=args.responses, source_info=args.source_info, jsonl=args.jsonl, split=args.split
     )
+    examples = sample_examples(examples, args.limit)
     rows = run_ablation(examples)
 
     _print_table(source, len(examples), rows)

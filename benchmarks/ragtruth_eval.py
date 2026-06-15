@@ -204,6 +204,17 @@ def load_examples(
     return demo_examples(), "built-in demo fixture (SMOKE TEST - not a benchmark)"
 
 
+def sample_examples(examples: list[Example], limit: int, seed: int = 0) -> list[Example]:
+    """Deterministic random sub-sample, so a bounded run (e.g. the API-backed
+    logic signal) is representative across task types, not just the file head.
+    `limit <= 0` or larger than the set returns everything."""
+    if limit and 0 < limit < len(examples):
+        import random  # noqa: PLC0415
+
+        return random.Random(seed).sample(examples, limit)
+    return examples
+
+
 def demo_examples() -> list[Example]:
     """Tiny synthetic set: grounded answers vs. fabricated ones."""
     metformin = Chunk("c1", "Metformin initial dose is 500mg twice daily with meals.", "ADA 2024")
@@ -230,11 +241,13 @@ def main() -> None:
     parser.add_argument("--jsonl", help="self-contained JSONL dump (custom/injected)")
     parser.add_argument("--split", help="RAGTruth split filter, e.g. train|test")
     parser.add_argument("--demo", action="store_true", help="built-in synthetic fixture")
+    parser.add_argument("--limit", type=int, default=0, help="evaluate a random sample of this many")
     args = parser.parse_args()
 
     examples, source = load_examples(
         responses=args.responses, source_info=args.source_info, jsonl=args.jsonl, split=args.split
     )
+    examples = sample_examples(examples, args.limit)
     is_demo = not (args.responses and args.source_info) and not args.jsonl
     m = evaluate(examples)
 

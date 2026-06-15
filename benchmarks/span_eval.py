@@ -24,7 +24,7 @@ from hallushield.core.sentences import split_sentences_with_offsets
 from hallushield.core.types import ValidationResult, Verdict
 from hallushield.pipeline import build_default_fusion, validate
 
-from .ragtruth_eval import Example, load_examples
+from .ragtruth_eval import Example, load_examples, sample_examples
 
 Span = tuple[int, int]
 
@@ -95,11 +95,13 @@ def main() -> None:
     parser.add_argument("--source-info", help="real RAGTruth source_info.jsonl")
     parser.add_argument("--jsonl", help="self-contained JSONL dump")
     parser.add_argument("--split", help="RAGTruth split filter, e.g. train|test")
+    parser.add_argument("--limit", type=int, default=0, help="evaluate a random sample of this many")
     args = parser.parse_args()
 
     examples, source = load_examples(
         responses=args.responses, source_info=args.source_info, jsonl=args.jsonl, split=args.split
     )
+    examples = sample_examples(examples, args.limit)
     if not any(ex.gold_spans for ex in examples):
         print("NOTE: no gold spans present (demo/jsonl have none) — span F1 needs real RAGTruth labels.")
     m = evaluate_spans(examples)
