@@ -2,18 +2,31 @@
 
 The library, FastAPI middleware, evaluation harness, and demo are complete and tested. The remaining work is primarily **data acquisition** and **tuning on real data** rather than new code — every harness below is already implemented and unit-tested.
 
-## Benchmarking on real data
+## Results — RAGTruth test split
 
-- **RAGTruth headline F1.** The harness (`benchmarks/ragtruth_eval`, `benchmarks/span_eval`, `benchmarks/ablation`) is ready; it needs the RAGTruth release. Download `response.jsonl` and `source_info.jsonl` (ParticleMedia/RAGTruth) into `datasets/`, then:
+Run on the real RAGTruth release (ParticleMedia/RAGTruth); precision/recall/F1 for the positive (hallucinated) class:
 
-  ```bash
-  python -m benchmarks.ablation \
-      --responses datasets/response.jsonl \
-      --source-info datasets/source_info.jsonl \
-      --split test
-  ```
+| Signals | example-F1 | span-F1 | n |
+| --- | --- | --- | --- |
+| lexical (baseline) | 0.544 | 0.102 | 2,675 (full test split) |
+| grounding | 0.734 | 0.375 | 150 (random sample) |
+| grounding + logic | 0.765 | 0.365 | 30 (random sample) |
 
-  Results to date are on the synthetic `HalluShield-Med` set (`n = 10`) and are illustrative only.
+Each added signal raises example-level F1; grounding (~0.73) is in the range LettuceDetect reports. **Caveats:** the grounding and fusion rows use random sub-samples — the grounding model runs per sentence on CPU and the LLM-judge makes one API call per sentence, so the full-split fusion run is cost/time-bound. The rows therefore use different `n` and are indicative, not a like-for-like comparison.
+
+Reproduce (`--limit` bounds the API-backed logic row):
+
+```bash
+mkdir -p datasets
+curl -sSL -o datasets/response.jsonl    https://raw.githubusercontent.com/ParticleMedia/RAGTruth/main/dataset/response.jsonl
+curl -sSL -o datasets/source_info.jsonl https://raw.githubusercontent.com/ParticleMedia/RAGTruth/main/dataset/source_info.jsonl
+python -m benchmarks.ablation  --responses datasets/response.jsonl --source-info datasets/source_info.jsonl --split test --limit 150
+python -m benchmarks.span_eval --responses datasets/response.jsonl --source-info datasets/source_info.jsonl --split test --limit 150
+```
+
+**For a definitive headline:** run grounding-only over the full test split (free, local — no API), and the fusion row on a larger sample.
+
+## More benchmarking
 
 - **HalluShield-Med at scale.** The injection generator ships with a small built-in seed set. To reach a larger sample, convert medical Q&A (e.g. MedQuAD) into the `--pairs` JSONL shape (`{answer, context, question}`) and run `benchmarks/hallushield_med`.
 
