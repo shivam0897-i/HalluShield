@@ -1,0 +1,501 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>HalluShield — the hallucination firewall for RAG</title>
+<meta name="description" content="A real-time firewall that scores every sentence of your LLM's answer against the retrieved context, cites sources, and blocks or self-heals what isn't grounded." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800;900&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#0a0f11; --ink-2:#0d1417; --panel:#0e1619;
+  --cyan:#4fe3da; --cyan-dim:#2a8f8a; --grid:#15302e; --grid-2:#102220;
+  --paper:#e9efec; --muted:#a8bbb7; --muted-2:#7e9a95;
+  --pass:#56d364; --warn:#e3b341; --heal:#fa5e55;
+  --max:1180px;
+  --mono:'JetBrains Mono',ui-monospace,monospace;
+  --disp:'Archivo',system-ui,sans-serif;
+  --body:'IBM Plex Sans',system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth; scroll-padding-top:80px}
+:focus-visible{outline:2px solid var(--cyan); outline-offset:2px; border-radius:2px}
+body{
+  margin:0; background:var(--ink); color:var(--paper);
+  font-family:var(--body); font-size:16px; line-height:1.6;
+  -webkit-font-smoothing:antialiased; overflow-x:hidden;
+}
+/* blueprint grid + grain */
+body::before{
+  content:""; position:fixed; inset:0; z-index:0; pointer-events:none;
+  background-image:
+    linear-gradient(var(--grid-2) 1px,transparent 1px),
+    linear-gradient(90deg,var(--grid-2) 1px,transparent 1px);
+  background-size:46px 46px;
+  mask-image:radial-gradient(circle at 50% 30%,#000 0%,transparent 85%);
+  opacity:.6;
+}
+body::after{
+  content:""; position:fixed; inset:0; z-index:0; pointer-events:none; opacity:.045;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+}
+a{color:inherit;text-decoration:none}
+.wrap{max-width:var(--max); margin:0 auto; padding:0 28px; position:relative; z-index:2}
+.mono{font-family:var(--mono)}
+.tag{font-family:var(--mono); font-size:12px; letter-spacing:.18em; color:var(--cyan-dim); text-transform:uppercase}
+.tag b{color:var(--cyan)}
+
+/* registration crosshairs */
+.crosshair{position:fixed; z-index:3; width:18px; height:18px; pointer-events:none; opacity:.5}
+.crosshair::before,.crosshair::after{content:"";position:absolute;background:var(--cyan-dim)}
+.crosshair::before{left:8px;top:0;width:1px;height:18px}
+.crosshair::after{top:8px;left:0;height:1px;width:18px}
+.crosshair.tl{top:16px;left:16px}.crosshair.tr{top:16px;right:16px}
+.crosshair.bl{bottom:16px;left:16px}.crosshair.br{bottom:16px;right:16px}
+
+/* nav */
+header{position:sticky; top:0; z-index:20; backdrop-filter:blur(8px);
+  background:linear-gradient(var(--ink),rgba(10,15,17,.78)); border-bottom:1px solid var(--grid)}
+nav{display:flex; align-items:center; justify-content:space-between; height:64px}
+.brand{display:flex; align-items:center; gap:11px; font-family:var(--disp); font-weight:800; letter-spacing:-.01em; font-size:18px}
+.brand .dot{width:11px;height:11px;border:2px solid var(--cyan); border-radius:2px; box-shadow:0 0 10px var(--cyan); animation:pulse 2.4s infinite}
+@keyframes pulse{0%,100%{box-shadow:0 0 4px var(--cyan)}50%{box-shadow:0 0 14px var(--cyan)}}
+.navlinks{display:flex; gap:26px; align-items:center; font-family:var(--mono); font-size:13px; color:var(--muted)}
+.navlinks a{transition:color .2s} .navlinks a:hover{color:var(--cyan)}
+.navlinks .gh{color:var(--ink); background:var(--cyan); padding:8px 14px; border-radius:3px; font-weight:700}
+.navlinks .gh:hover{background:#7af0e8; color:var(--ink)}
+.burger{display:none}
+
+/* hero */
+.hero{position:relative; padding:120px 0 96px; min-height:92vh; display:flex; align-items:center; text-align:center; overflow:hidden}
+.hero-glow{position:absolute; left:50%; top:30%; transform:translate(-50%,-50%); width:min(900px,120vw); height:560px;
+  background:radial-gradient(ellipse at center, rgba(79,227,218,.16), rgba(79,227,218,.05) 38%, transparent 70%);
+  filter:blur(8px); z-index:0; pointer-events:none}
+.hero .wrap{display:flex; flex-direction:column; align-items:center; gap:28px}
+.kicker{display:inline-flex; gap:10px; align-items:center; font-family:var(--mono); font-size:12.5px; color:var(--muted);
+  border:1px solid var(--grid); padding:8px 16px; border-radius:40px; width:max-content; background:rgba(13,20,23,.5)}
+.kicker .blip{width:7px;height:7px;border-radius:50%;background:var(--pass);box-shadow:0 0 8px var(--pass)}
+h1{font-family:var(--disp); font-weight:900; letter-spacing:-.028em; line-height:1.02;
+  font-size:clamp(42px,7vw,88px); margin:0; max-width:18ch; text-wrap:balance}
+h1 .hl{color:var(--cyan); position:relative}
+.lede{font-size:clamp(17px,1.9vw,22px); font-weight:500; color:#c4d4d1; line-height:1.55; max-width:62ch; margin:0}
+.lede b{color:var(--paper); font-weight:600} .lede .hl{color:var(--cyan); font-weight:600}
+.cta{display:flex; gap:16px; flex-wrap:wrap; align-items:center; justify-content:center; margin-top:4px}
+.btn{font-family:var(--mono); font-size:14px; font-weight:600; padding:14px 24px; border-radius:5px; border:1px solid var(--cyan);
+  display:inline-flex; gap:9px; align-items:center; transition:transform .15s, background .2s, box-shadow .2s}
+.btn.solid{background:var(--cyan); color:var(--ink)}
+.btn.solid:hover{box-shadow:0 8px 30px rgba(79,227,218,.32); transform:translateY(-2px)}
+.btn.ghost{color:var(--cyan); background:transparent}
+.btn.ghost:hover{background:rgba(79,227,218,.08); transform:translateY(-2px)}
+.installline{font-family:var(--mono); font-size:13px; color:var(--muted); border:1px dashed var(--grid);
+  padding:10px 18px; border-radius:6px; width:max-content; max-width:100%; overflow:auto; background:rgba(7,12,13,.6)}
+.installline b{color:var(--cyan)}
+
+/* pipeline schematic */
+.schematic{position:relative; margin-top:30px; width:100%; border:1px solid var(--grid); border-radius:10px;
+  background:linear-gradient(rgba(13,20,23,.7),rgba(10,15,17,.55)); padding:34px 18px 16px; overflow:hidden; text-align:left;
+  box-shadow:0 24px 60px -30px rgba(0,0,0,.8)}
+.schematic .scap{position:absolute; top:12px; left:16px}
+#flow{display:block; width:100%; height:160px}
+.stagerow{display:flex; justify-content:space-between; gap:6px; margin-top:6px; font-family:var(--mono); font-size:10.5px; color:var(--muted-2); letter-spacing:.04em}
+.stagerow span{flex:1; text-align:center}
+.stagerow .sh{color:var(--cyan)}
+
+/* sections */
+section{position:relative; padding:84px 0; z-index:2}
+.shead{display:flex; align-items:baseline; gap:16px; margin-bottom:30px; border-bottom:1px solid var(--grid); padding-bottom:14px}
+.shead .num{font-family:var(--mono); color:var(--cyan); font-size:13px}
+.shead h2{font-family:var(--disp); font-weight:800; font-size:clamp(26px,3.4vw,40px); letter-spacing:-.02em; margin:0}
+.shead .meta{margin-left:auto; font-family:var(--mono); font-size:11.5px; color:var(--muted-2)}
+
+/* problem */
+.problem-grid{display:grid; grid-template-columns:1.1fr .9fr; gap:36px; align-items:center}
+.problem-grid p{color:var(--muted); font-size:17px; max-width:46ch}
+.problem-grid p b{color:var(--paper)}
+.answercard{border:1px solid var(--grid); border-radius:8px; background:var(--panel); padding:18px 18px 16px; font-family:var(--mono); font-size:13.5px}
+.answercard .q{color:var(--muted-2); margin-bottom:10px}
+.answercard .a{line-height:1.7}
+.answercard .bad{color:var(--heal); text-decoration:underline wavy var(--heal); text-underline-offset:3px}
+.answercard .note{margin-top:12px; font-size:11.5px; color:var(--heal)}
+
+/* how it works cards */
+.layers{display:grid; grid-template-columns:repeat(4,1fr); gap:16px}
+.layer{border:1px solid var(--grid); border-radius:8px; background:var(--panel); padding:20px 18px; position:relative; overflow:hidden}
+.layer .ix{font-family:var(--mono); font-size:11px; color:var(--cyan); letter-spacing:.12em}
+.layer h3{font-family:var(--disp); font-weight:700; font-size:18px; margin:12px 0 9px}
+.layer p{color:var(--muted); font-size:13.6px; margin:0; line-height:1.55}
+.layer .bar{position:absolute; left:0; top:0; height:3px; width:0; background:var(--cyan); box-shadow:0 0 10px var(--cyan)}
+
+/* demo */
+.demo-grid{display:grid; grid-template-columns:1fr; gap:0; border:1px solid var(--grid); border-radius:10px; overflow:hidden; background:var(--panel)}
+.demo-head{display:flex; align-items:center; gap:12px; padding:14px 18px; border-bottom:1px solid var(--grid); font-family:var(--mono); font-size:12.5px; color:var(--muted)}
+.demo-head .verdict{margin-left:auto; font-weight:700; padding:4px 11px; border-radius:4px}
+.v-pass{color:var(--pass); background:rgba(86,211,100,.12)} .v-warn{color:var(--warn); background:rgba(227,179,65,.12)} .v-heal{color:var(--heal); background:rgba(250,94,85,.12)}
+.demo-body{padding:8px 8px}
+.sentence{display:grid; grid-template-columns:1fr auto; gap:14px; align-items:center; padding:14px 16px; border-left:3px solid transparent; margin:6px; border-radius:6px; background:rgba(255,255,255,.012); opacity:0; transform:translateX(-10px)}
+.sentence .txt{font-size:15px}
+.sentence .src{font-family:var(--mono); font-size:11px; color:var(--muted-2); white-space:nowrap}
+.sentence.pass{border-left-color:var(--pass)} .sentence.warn{border-left-color:var(--warn)} .sentence.heal{border-left-color:var(--heal)}
+.pill{font-family:var(--mono); font-size:10.5px; font-weight:700; padding:3px 8px; border-radius:3px; margin-right:8px}
+.pill.pass{color:var(--pass); background:rgba(86,211,100,.14)} .pill.warn{color:var(--warn); background:rgba(227,179,65,.14)} .pill.heal{color:var(--heal); background:rgba(250,94,85,.14)} .pill.fixed{color:var(--cyan); background:rgba(79,227,218,.14)}
+.heal-swap{display:none}
+
+/* results */
+.bars{display:grid; gap:20px; margin-top:6px}
+.bar-row{display:grid; grid-template-columns:180px 1fr 84px; gap:18px; align-items:center}
+.bar-row .lbl{font-family:var(--mono); font-size:13px; color:var(--muted)}
+.bar-row .lbl .acc{color:var(--cyan)}
+.track{height:30px; background:rgba(255,255,255,.03); border:1px solid var(--grid); border-radius:4px; position:relative; overflow:hidden}
+.fill{position:absolute; left:0; top:0; bottom:0; width:0; border-radius:3px;
+  background:linear-gradient(90deg,var(--cyan-dim),var(--cyan)); box-shadow:0 0 16px rgba(79,227,218,.3)}
+.fill.base{background:linear-gradient(90deg,#324f4d,#4a6f6c)}
+.bar-row .val{font-family:var(--mono); font-size:18px; font-weight:700; text-align:right}
+.caveat{font-family:var(--mono); font-size:11.5px; color:var(--muted-2); margin-top:22px; border-left:2px solid var(--grid); padding-left:14px; line-height:1.7}
+
+/* features */
+.feat{display:grid; grid-template-columns:repeat(3,1fr); gap:16px}
+.fcard{border:1px solid var(--grid); border-radius:8px; padding:20px; background:var(--panel); transition:border-color .2s, transform .2s}
+.fcard:hover{border-color:var(--cyan-dim); transform:translateY(-3px)}
+.fcard .fi{font-family:var(--mono); color:var(--cyan); font-size:12px}
+.fcard h4{font-family:var(--disp); font-weight:700; font-size:16.5px; margin:11px 0 7px}
+.fcard p{color:var(--muted); font-size:13.4px; margin:0; line-height:1.5}
+
+/* integrate */
+.code-wrap{border:1px solid var(--grid); border-radius:10px; overflow:hidden; background:#070c0d}
+.tabs{display:flex; border-bottom:1px solid var(--grid); font-family:var(--mono); font-size:13px}
+.tab{padding:13px 20px; color:var(--muted); cursor:pointer; border-right:1px solid var(--grid); transition:color .2s, background .2s}
+.tab.active{color:var(--cyan); background:rgba(79,227,218,.06)}
+pre{margin:0; padding:22px 24px; overflow:auto; font-family:var(--mono); font-size:13.5px; line-height:1.7; color:#cfe6e3}
+.panel-code{display:none} .panel-code.active{display:block}
+.tok-k{color:#7ad0ff}.tok-s{color:#9ae6b4}.tok-c{color:var(--muted-2)}.tok-f{color:var(--cyan)}.tok-n{color:#e3b341}
+
+/* footer */
+footer{border-top:1px solid var(--grid); padding:54px 0 40px; position:relative; z-index:2}
+.foot{display:grid; grid-template-columns:1.4fr 1fr; gap:30px; align-items:start}
+.disclaimer{font-family:var(--mono); font-size:12px; color:var(--muted-2); border:1px solid var(--grid); border-radius:7px; padding:16px; line-height:1.7; max-width:54ch}
+.disclaimer b{color:var(--warn)}
+.foot-links{display:flex; flex-direction:column; gap:9px; font-family:var(--mono); font-size:13px; color:var(--muted)}
+.foot-links a:hover{color:var(--cyan)}
+.colophon{margin-top:34px; font-family:var(--mono); font-size:11px; color:var(--muted-2); display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px; border-top:1px solid var(--grid); padding-top:18px}
+
+.reveal{opacity:0; transform:translateY(22px)}
+
+@media(max-width:880px){
+  .navlinks{display:none}
+  .problem-grid,.foot{grid-template-columns:1fr}
+  .layers{grid-template-columns:1fr 1fr}
+  .feat{grid-template-columns:1fr}
+  .bar-row{grid-template-columns:120px 1fr 64px; gap:10px}
+  .shead{flex-wrap:wrap; gap:8px} .shead .meta{margin-left:0; width:100%}
+}
+@media(max-width:560px){
+  .layers{grid-template-columns:1fr} h1{font-size:33px; max-width:13ch; line-height:1.06}
+  .kicker{font-size:11px; padding:6px 11px}
+  .installline{font-size:12px; max-width:calc(100vw-58px)}
+  #flow{height:120px}
+  .schematic{padding:16px 12px 10px}
+  .tabs{flex-wrap:wrap} .tab{border-right:none; border-bottom:1px solid var(--grid)}
+  .stagerow{font-size:9px}
+}
+@media(prefers-reduced-motion:reduce){
+  *{animation:none!important; transition:none!important; scroll-behavior:auto!important}
+  .reveal,.sentence{opacity:1!important; transform:none!important}
+}
+</style>
+</head>
+<body>
+<span class="crosshair tl" aria-hidden="true"></span><span class="crosshair tr" aria-hidden="true"></span><span class="crosshair bl" aria-hidden="true"></span><span class="crosshair br" aria-hidden="true"></span>
+
+<header>
+  <div class="wrap">
+    <nav>
+      <a class="brand" href="#top"><span class="dot"></span>HalluShield</a>
+      <div class="navlinks">
+        <a href="#how">How it works</a>
+        <a href="#demo">Demo</a>
+        <a href="#results">Results</a>
+        <a href="#integrate">Install</a>
+        <a class="gh" href="https://github.com/shivam0897-i/HalluShield" target="_blank" rel="noopener" aria-label="View HalluShield on GitHub (opens in a new tab)">GitHub ↗</a>
+      </div>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+<section class="hero">
+  <div class="hero-glow" aria-hidden="true"></div>
+  <div class="wrap">
+    <span class="kicker reveal"><span class="blip"></span> real-time hallucination firewall · for RAG</span>
+    <h1 class="reveal">Intercept RAG hallucinations<br><span class="hl">before</span> the user sees them.</h1>
+    <p class="lede reveal">HalluShield scores <b>every sentence</b> of your model's answer against the retrieved context, attaches per-sentence source citations, and blocks or <span class="hl">self-heals</span> whatever isn't grounded — in real time, before delivery.</p>
+    <div class="cta reveal">
+      <a class="btn solid" href="https://github.com/shivam0897-i/HalluShield" target="_blank" rel="noopener" aria-label="View HalluShield on GitHub (opens in a new tab)">View on GitHub →</a>
+      <a class="btn ghost" href="#demo">See it intercept</a>
+    </div>
+    <span class="installline reveal">$ git clone …/HalluShield &amp;&amp; pip install -e <b>".[ml,api]"</b></span>
+
+    <div class="schematic reveal">
+      <span class="scap tag">[ <b>pipeline</b> ] query → retrieve → shield → generate → validate → heal</span>
+      <canvas id="flow" role="img" aria-label="Animated pipeline: green grounded particles pass while red hallucination particles are blocked at the shield"></canvas>
+      <div class="stagerow">
+        <span>QUERY</span><span>RETRIEVE</span><span class="sh">◆ SHIELD</span><span>GENERATE</span><span class="sh">◆ VALIDATE</span><span>HEAL</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="problem">
+  <div class="wrap">
+    <div class="shead reveal"><span class="num">01</span><h2>RAG reduced hallucinations. It didn't end them.</h2><span class="meta">// the problem</span></div>
+    <div class="problem-grid">
+      <p class="reveal">A retrieval-augmented model can still ignore its context, misread it, or invent details that were never retrieved. The worst part: it stays <b>confident and fluent</b> while doing it — and it cites a document, so users trust it. Wrong answers propagate as fact. In medicine, law, and finance, that's not a typo. It's a liability.</p>
+      <div class="answercard reveal">
+        <div class="q">› user: what is the dose of metformin?</div>
+        <div class="a">Metformin is started at 500&nbsp;mg twice daily with meals. <span class="bad">It also instantly cures cancer.</span></div>
+        <div class="note">▲ fluent, sourced-looking — and partly fabricated.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="how">
+  <div class="wrap">
+    <div class="shead reveal"><span class="num">02</span><h2>A firewall around the RAG call.</h2><span class="meta">// four layers</span></div>
+    <div class="layers">
+      <div class="layer reveal"><span class="bar"></span><div class="ix">[ 02·1 ]</div><h3>Upstream Shield</h3><p>Before generation, score each retrieved chunk's source credibility and detect contradictions between chunks. Drop or down-weight the poisoned ones so the model sees cleaner context.</p></div>
+      <div class="layer reveal"><span class="bar"></span><div class="ix">[ 02·2 ]</div><h3>Validate</h3><p>Split the answer into sentences and score each for groundedness — with pluggable signals (lexical · LettuceDetect · LLM-judge) fused into one number, plus a source citation.</p></div>
+      <div class="layer reveal"><span class="bar"></span><div class="ix">[ 02·3 ]</div><h3>Decide</h3><p>Map the score to PASS / WARN / HEAL using domain-adaptive thresholds (medical PASS ≥ 0.90 … general ≥ 0.75). The answer is only as safe as its <em>worst</em> sentence.</p></div>
+      <div class="layer reveal"><span class="bar"></span><div class="ix">[ 02·4 ]</div><h3>Self-Heal</h3><p>On a blocked claim: re-query → re-retrieve → re-generate → re-score. If it still can't be grounded, fail honestly — “I don't have enough information.”</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="demo">
+  <div class="wrap">
+    <div class="shead reveal"><span class="num">03</span><h2>Watch it score, cite, and heal.</h2><span class="meta">// per-sentence verdict</span></div>
+    <div class="demo-grid reveal">
+      <div class="demo-head">
+        <span>domain: <b style="color:var(--cyan)">medical</b></span><span>· answer validated against 1 chunk</span>
+        <span class="verdict v-heal" id="answerVerdict">HEAL</span>
+      </div>
+      <div class="demo-body" id="demoBody">
+        <div class="sentence pass" data-i="0"><div class="txt"><span class="pill pass">PASS</span>Metformin is started at 500&nbsp;mg twice daily with meals.</div><div class="src">src ⟶ ADA&nbsp;2024 · 0.96</div></div>
+        <div class="sentence warn" data-i="1"><div class="txt"><span class="pill warn">WARN</span>It is generally well tolerated.</div><div class="src">partial · 0.71</div></div>
+        <div class="sentence heal" data-i="2" id="healLine"><div class="txt"><span class="pill heal">HEAL</span>It also instantly cures cancer.</div><div class="src">no supporting chunk · 0.00</div></div>
+        <div class="sentence pass heal-swap" data-i="3" id="healedLine"><div class="txt"><span class="pill fixed">HEALED</span>I don't have enough information to make any claim about cancer.</div><div class="src">self-heal · honest fallback</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="results">
+  <div class="wrap">
+    <div class="shead reveal"><span class="num">04</span><h2>Real numbers, on the real benchmark.</h2><span class="meta">// RAGTruth test split</span></div>
+    <div class="bars">
+      <div class="bar-row reveal"><div class="lbl">lexical <span class="acc">baseline</span></div><div class="track"><div class="fill base" data-f="0.544"></div></div><div class="val" data-count="0.544">0.000</div></div>
+      <div class="bar-row reveal"><div class="lbl">+ <span class="acc">grounding</span></div><div class="track"><div class="fill" data-f="0.734"></div></div><div class="val" data-count="0.734">0.000</div></div>
+      <div class="bar-row reveal"><div class="lbl">+ grounding <span class="acc">&amp; logic</span></div><div class="track"><div class="fill" data-f="0.765"></div></div><div class="val" data-count="0.765">0.000</div></div>
+    </div>
+    <p class="caveat reveal">example-level F1, hallucinated class · RAGTruth test split (ParticleMedia/RAGTruth). lexical on the full split (n=2,675); grounding (n=150) and grounding+logic (n=30) on random samples — different sample sizes, so these rows are indicative, not like-for-like. span-level F1 is 0.10 / 0.38 / 0.37 (adding the judge doesn't move it on this small sample). preliminary numbers pending a full-split run — each signal is one config line.</p>
+  </div>
+</section>
+
+<section id="why">
+  <div class="wrap">
+    <div class="shead reveal"><span class="num">05</span><h2>What you actually get.</h2><span class="meta">// drop-in</span></div>
+    <div class="feat">
+      <div class="fcard reveal"><div class="fi">[ scoring ]</div><h4>Per-sentence groundedness</h4><p>Every sentence gets a verdict and the source chunk that backs it — citations your users can see, not a single opaque score.</p></div>
+      <div class="fcard reveal"><div class="fi">[ pre-gen ]</div><h4>Upstream Shield</h4><p>Source-credibility scoring + inter-chunk contradiction detection. Catches poisoned context before the model ever reads it.</p></div>
+      <div class="fcard reveal"><div class="fi">[ recovery ]</div><h4>Self-healing loop</h4><p>Re-query, re-retrieve, re-generate, re-score — or fail honestly. No dead-end “blocked” without a path forward.</p></div>
+      <div class="fcard reveal"><div class="fi">[ policy ]</div><h4>Domain-adaptive thresholds</h4><p>Strict for medical/legal/finance, relaxed for general. One parameter, threaded everywhere.</p></div>
+      <div class="fcard reveal"><div class="fi">[ agnostic ]</div><h4>Model- &amp; store-agnostic</h4><p>Any LLM via LiteLLM, any vector store. Bring your own retriever and generator.</p></div>
+      <div class="fcard reveal"><div class="fi">[ pluggable ]</div><h4>One-line ablation knob</h4><p>Every detector is a <span class="mono" style="color:var(--cyan)">Signal</span>. Swap the baseline for a real model by editing one config list.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="integrate">
+  <div class="wrap">
+    <div class="shead reveal"><span class="num">06</span><h2>Drop it into your RAG.</h2><span class="meta">// two ways</span></div>
+    <div class="code-wrap reveal">
+      <div class="tabs" role="tablist" aria-label="Integration method">
+        <div class="tab active" data-tab="py" role="tab" tabindex="0" aria-selected="true">in-process · Python</div>
+        <div class="tab" data-tab="http" role="tab" tabindex="0" aria-selected="false">as a service · HTTP</div>
+      </div>
+      <div class="panel-code active" data-panel="py"><pre><span class="tok-k">from</span> hallushield <span class="tok-k">import</span> Chunk, validate
+<span class="tok-k">from</span> hallushield.core.types <span class="tok-k">import</span> Verdict
+
+<span class="tok-c"># query / answer / chunks come from YOUR pipeline</span>
+result = <span class="tok-f">validate</span>(
+    query=query,
+    answer=my_llm_answer,
+    chunks=[<span class="tok-f">Chunk</span>(d.id, d.text, source=d.source) <span class="tok-k">for</span> d <span class="tok-k">in</span> retrieved],
+    domain=<span class="tok-s">"medical"</span>,
+)
+
+<span class="tok-k">if</span> result.verdict <span class="tok-k">is</span> Verdict.PASS:
+    <span class="tok-k">return</span> answer                      <span class="tok-c"># safe to deliver</span>
+<span class="tok-k">elif</span> result.verdict <span class="tok-k">is</span> Verdict.WARN:
+    <span class="tok-k">return</span> <span class="tok-f">render_with_warnings</span>(answer, result)
+<span class="tok-k">else</span>:
+    <span class="tok-k">return</span> <span class="tok-s">"I don't have enough information to answer that."</span></pre></div>
+      <div class="panel-code" data-panel="http"><pre><span class="tok-c"># POST /validate  — uvicorn hallushield.middleware.app:app</span>
+{
+  <span class="tok-n">"query"</span>:  <span class="tok-s">"What is the recommended dose of Metformin?"</span>,
+  <span class="tok-n">"answer"</span>: <span class="tok-s">"Metformin is started at 500mg twice daily with meals."</span>,
+  <span class="tok-n">"chunks"</span>: [
+    {<span class="tok-n">"id"</span>: <span class="tok-s">"chunk_1"</span>, <span class="tok-n">"text"</span>: <span class="tok-s">"Metformin initial dose is 500mg twice daily."</span>, <span class="tok-n">"source"</span>: <span class="tok-s">"ADA 2024"</span>}
+  ],
+  <span class="tok-n">"domain"</span>: <span class="tok-s">"medical"</span>
+}
+<span class="tok-c">// → { "verdict": "PASS", "answer_score": 0.95, "claims": [...], "healed": false }</span></pre></div>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="foot">
+      <div>
+        <div class="brand" style="font-size:22px; margin-bottom:14px"><span class="dot"></span>HalluShield</div>
+        <div class="disclaimer"><b>PASS means grounded in the retrieved chunks — not a guarantee of factual or clinical correctness.</b> The chunks themselves may be wrong. HalluShield is a safety layer, not a source of truth; keep a human in the loop for high-stakes use.</div>
+      </div>
+      <div class="foot-links">
+        <a href="https://github.com/shivam0897-i/HalluShield" target="_blank" rel="noopener">→ Source on GitHub</a>
+        <a href="https://github.com/shivam0897-i/HalluShield#readme" target="_blank" rel="noopener">→ Integration guide (README)</a>
+        <a href="https://arxiv.org/abs/2402.07067" target="_blank" rel="noopener">→ RAGTruth benchmark</a>
+        <a href="https://github.com/KRLabsOrg/LettuceDetect" target="_blank" rel="noopener">→ LettuceDetect (grounding model)</a>
+        <a href="#top">↑ Back to top</a>
+      </div>
+    </div>
+    <div class="colophon">
+      <span>HALLUSHIELD · hallucination firewall for RAG</span>
+      <span>MIT LICENSE · built as a final-year project</span>
+      <span class="mono">drawn in blueprint · 2026</span>
+    </div>
+  </div>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+<script>
+"use strict";
+const REDUCED = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/* ---------- tabs ---------- */
+function activateTab(t){
+  document.querySelectorAll(".tab").forEach(x=>{x.classList.remove("active");x.setAttribute("aria-selected","false");});
+  document.querySelectorAll(".panel-code").forEach(x=>x.classList.remove("active"));
+  t.classList.add("active"); t.setAttribute("aria-selected","true");
+  const p=document.querySelector('.panel-code[data-panel="'+t.dataset.tab+'"]');
+  if(p) p.classList.add("active");
+}
+document.querySelectorAll(".tab").forEach(t=>{
+  t.addEventListener("click",()=>activateTab(t));
+  t.addEventListener("keydown",e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); activateTab(t); } });
+});
+
+/* ---------- pipeline particle flow ---------- */
+(function(){
+  const c=document.getElementById("flow"); if(!c) return;
+  const ctx=c.getContext("2d");
+  let W,H,dpr=Math.min(devicePixelRatio||1,2);
+  function size(){ W=c.clientWidth||c.parentElement.clientWidth||800; H=150; c.width=W*dpr; c.height=H*dpr; ctx.setTransform(dpr,0,0,dpr,0,0); }
+  size(); requestAnimationFrame(size); addEventListener("resize",size);
+  // 6 stages across width
+  const stages=()=>[0.06,0.24,0.42,0.6,0.78,0.95].map(x=>x*W);
+  const shieldX=()=>0.42*W, valX=()=>0.78*W, midY=H*0.5;
+  const COL={pass:"#56d364",heal:"#fa5e55",cyan:"#4fe3da",dim:"#2a8f8a"};
+  const parts=[];
+  function spawn(){ const bad=Math.random()<0.34;
+    parts.push({x:0,y:midY+(Math.random()-0.5)*14,v:0.9+Math.random()*0.7,bad,vy:0,dead:false,blocked:false}); }
+  let acc=0;
+  function frame(){
+    requestAnimationFrame(frame);
+    ctx.clearRect(0,0,W,H);
+    // baseline rail + nodes
+    ctx.strokeStyle="rgba(42,143,138,.35)"; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(0,midY); ctx.lineTo(W,midY); ctx.stroke();
+    const S=stages();
+    S.forEach((sx,i)=>{
+      const isKey=(i===2||i===4);
+      ctx.fillStyle=isKey?COL.cyan:"rgba(120,160,156,.5)";
+      ctx.beginPath(); ctx.arc(sx,midY,isKey?5:3,0,7); ctx.fill();
+      if(isKey){ ctx.strokeStyle="rgba(79,227,218,.4)"; ctx.beginPath(); ctx.moveTo(sx,midY-26); ctx.lineTo(sx,midY+26); ctx.stroke(); }
+    });
+    // shield bracket
+    const shx=shieldX();
+    ctx.strokeStyle="rgba(79,227,218,.55)"; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.moveTo(shx-9,midY-30); ctx.lineTo(shx-9,midY+30); ctx.moveTo(shx+9,midY-30); ctx.lineTo(shx+9,midY+30); ctx.stroke();
+    if(!REDUCED){ acc++; if(acc%9===0) spawn(); }
+    for(const p of parts){
+      if(p.dead) continue;
+      p.x+=p.v; p.y+=p.vy; p.vy*=0.97;
+      if(p.bad && !p.blocked && p.x>=shx){ p.blocked=true; p.vy=(Math.random()<0.5?-1:1)*(1.4+Math.random()); }
+      if(p.blocked) p.v*=0.985;
+      const col=p.bad?COL.heal:COL.pass;
+      ctx.fillStyle=col; ctx.globalAlpha=p.blocked?Math.max(0,1-(p.x-shx)/120):1;
+      ctx.beginPath(); ctx.arc(p.x,p.y,2.2,0,7); ctx.fill();
+      ctx.globalAlpha=1;
+      if(p.x>W+20 || p.y<-20 || p.y>H+20) p.dead=true;
+    }
+    for(let i=parts.length-1;i>=0;i--) if(parts[i].dead) parts.splice(i,1);
+    // validate check sparkle
+    ctx.globalAlpha=1; ctx.fillStyle="rgba(86,211,100,.9)"; ctx.font="12px monospace"; ctx.fillText("✓", valX()+10, midY+4);
+  }
+  frame();
+})();
+
+/* ---------- GSAP scroll reveals + count-ups ---------- */
+(function(){
+  if(typeof gsap==="undefined" || typeof ScrollTrigger==="undefined"){ document.querySelectorAll(".reveal,.sentence").forEach(e=>{e.style.opacity=1;e.style.transform="none";}); return; }
+  try{ gsap.registerPlugin(ScrollTrigger); }catch(e){ document.querySelectorAll(".reveal,.sentence").forEach(el=>{el.style.opacity=1;el.style.transform="none";}); return; }
+
+  // hero load stagger
+  gsap.to(".hero .reveal",{opacity:1,y:0,duration:.8,stagger:.12,ease:"power3.out",delay:.15});
+
+  // generic reveals
+  gsap.utils.toArray(".reveal").forEach(el=>{
+    if(el.closest(".hero")) return;
+    gsap.fromTo(el,{opacity:0,y:22},{opacity:1,y:0,duration:.7,ease:"power3.out",
+      scrollTrigger:{trigger:el,start:"top 86%"}});
+  });
+
+  // layer top-bars draw in
+  gsap.utils.toArray(".layer").forEach((el,i)=>{
+    gsap.fromTo(el.querySelector(".bar"),{width:"0%"},{width:"100%",duration:.9,ease:"power2.out",
+      scrollTrigger:{trigger:el,start:"top 80%"},delay:i*0.08});
+  });
+
+  // demo sentences slide in, then heal swap
+  const sents=gsap.utils.toArray("#demoBody .sentence:not(.heal-swap)");
+  gsap.to(sents,{opacity:1,x:0,duration:.5,stagger:.35,ease:"power2.out",
+    scrollTrigger:{trigger:"#demo",start:"top 64%"},
+    onComplete(){
+      const heal=document.getElementById("healLine"), healed=document.getElementById("healedLine");
+      if(!heal||!healed||REDUCED) return;
+      gsap.delayedCall(1.1,()=>{
+        gsap.to(heal,{opacity:0,x:18,duration:.45,ease:"power2.in",onComplete(){
+          heal.style.display="none"; healed.style.display="grid";
+          gsap.fromTo(healed,{opacity:0,x:-12},{opacity:1,x:0,duration:.55,ease:"power3.out"});
+        }});
+      });
+    }});
+
+  // results bars + count
+  document.querySelectorAll(".fill").forEach(f=>{
+    const pct=(parseFloat(f.dataset.f)*100)+"%";
+    gsap.to(f,{width:pct,duration:1.1,ease:"power2.out",scrollTrigger:{trigger:f,start:"top 88%"}});
+  });
+  document.querySelectorAll(".val").forEach(v=>{
+    const target=parseFloat(v.dataset.count), obj={n:0};
+    gsap.to(obj,{n:target,duration:1.2,ease:"power1.out",scrollTrigger:{trigger:v,start:"top 88%"},
+      onUpdate(){ v.textContent=obj.n.toFixed(3); }});
+  });
+})();
+</script>
+</body>
+</html>

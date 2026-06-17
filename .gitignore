@@ -35,6 +35,7 @@ models/
 # Internal design / agent docs (kept local, not for public repo)
 HALLUSHIELD.md
 CLAUDE.md
+docs/superpowers/
 
 # Local-only helper scripts (manual smoke tests, not part of the package)
 scripts/
